@@ -4,14 +4,14 @@ use anchor_spl::token::{self, SetAuthority, Transfer, TokenAccount};
 #[program]
 pub mod fund {
     use super::*;
-
     pub fn initialize(
         ctx: Context<InitializeFund>,
         fund_goal: u64,
     ) -> ProgramResult {
         msg!("this is the owner {:?}", &ctx.accounts.initializer_deposit_token_account.owner);
-        msg!("this is the balance {:?}", &ctx.accounts.initializer_deposit_token_account.owner);
+        msg!("this is the balance {:?}", &ctx.accounts.initializer_deposit_token_account.amount);
         let fund_account = &mut ctx.accounts.fund_account;
+        fund_account.initializer_deposit_token_account = *ctx.accounts.initializer_deposit_token_account.to_account_info().key;
         fund_account.fund_goal_amount = fund_goal;
         fund_account.authority = *ctx.accounts.authority.key;
         fund_account.current_amount = 0;
@@ -25,6 +25,7 @@ pub mod fund {
     }
 }
 
+// Accounts that are sent to the program
 #[derive(Accounts)]
 pub struct InitializeFund<'info> {
     #[account(init)]
@@ -42,8 +43,10 @@ pub struct DonateFund<'info> {
     pub fund_account: ProgramAccount<'info, Fund>,
 }
 
+// Account our program saves / writes too
 #[account]
 pub struct Fund {
+    pub initializer_deposit_token_account: Pubkey,
     pub fund_goal_amount: u64,
     pub current_amount: u64,
     pub authority: Pubkey,
