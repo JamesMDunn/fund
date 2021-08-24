@@ -6,4 +6,4 @@ cluster = "localnet"
 wallet = "/Users/jamesdunn/.config/solana/id.json"
 
 [scripts]
-test = "mocha -t 1000000 tests/"
+test = "npx jest --detectOpenHandles ./tests"

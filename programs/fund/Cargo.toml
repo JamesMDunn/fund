@@ -16,3 +16,4 @@ default = []
 
 [dependencies]
 anchor-lang = "0.13.2"
+anchor-spl = "0.13.2"
