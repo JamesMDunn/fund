@@ -19,7 +19,7 @@ pub mod fund {
             .to_account_info()
             .key();
         ctx.accounts.fund_account.initializer_amount = initializer_amount;
-        msg!("got here  {}", ctx.accounts.fund_account.initializer_key);
+        msg!("got here {}", ctx.accounts.fund_account.initializer_key);
 
         let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
         token::set_authority(ctx.accounts.into(), AuthorityType::AccountOwner, Some(pda))?;
