@@ -10,11 +10,11 @@ pub mod fund {
 
     const FUND_PDA_SEED: &[u8] = b"fund";
 
-    pub fn initialize(ctx: Context<InitializeFund>) -> ProgramResult {
+    pub fn initialize(ctx: Context<InitializeFund>, initializer_amount: u64) -> ProgramResult {
         let user = &mut ctx.accounts.user;
         ctx.accounts.fund_account.initializer_key = user.to_account_info().key();
         ctx.accounts.fund_account.initializer_token_account = ctx.accounts.initializer_token_account.to_account_info().key();
-
+        ctx.accounts.fund_account.initializer_amount = initializer_amount;
         msg!("got here {}", ctx.accounts.fund_account.initializer_key);
 
         let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
@@ -52,7 +52,8 @@ pub struct InitializeFund<'info> {
 #[account]
 #[derive(Default)]
 pub struct FundAccount {
-    // pub data: Vec<Pubkey>,
+    pub initializer_amount: u64,
+    pub data: Vec<Pubkey>,
     pub initializer_key: Pubkey,
     pub initializer_token_account: Pubkey,
 }

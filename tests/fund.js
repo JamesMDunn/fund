@@ -15,6 +15,7 @@ describe('fund', () => {
   const mintAuthority = anchor.web3.Keypair.generate();
   const provider = anchor.getProvider();
   let pda = null;
+  const initializerAmount = 100;
 
   it('initialize state', async () => {
     await provider.connection.confirmTransaction(
@@ -30,23 +31,22 @@ describe('fund', () => {
         TOKEN_PROGRAM_ID
     )
     initializerTokenAccountA = await mintA.createAccount(provider.wallet.publicKey);
-    let amount = 100;
     await mintA.mintTo(
         initializerTokenAccountA,
         mintAuthority.publicKey,
         [mintAuthority],
-        amount,
+        initializerAmount,
     )
 
     let tokenAccountInfo = await mintA.getAccountInfo(initializerTokenAccountA)
 
-    assert.ok(tokenAccountInfo.amount.toString() === amount.toString());
+    assert.ok(tokenAccountInfo.amount.toString() === initializerAmount.toString());
+    assert.ok(tokenAccountInfo.owner.equals(provider.wallet.publicKey))
   });
 
   it('initializes fund', async() => {
-    console.log("token account", initializerTokenAccountA)
     const program = anchor.workspace.Fund;
-    const tx = await program.rpc.initialize({
+    const tx = await program.rpc.initialize(new anchor.BN(initializerAmount), {
       accounts: {
         fundAccount: fundAccount.publicKey,
         initializerTokenAccount: initializerTokenAccountA,
@@ -64,16 +64,13 @@ describe('fund', () => {
     )
     pda = tempPda;
 
-    console.log("this is pda", pda)
 
     let tokenAccount = await mintA.getAccountInfo(initializerTokenAccountA);
-    console.log("new owner:", tokenAccount.owner.toString())
     let fund = await program.account.fundAccount.fetch(fundAccount.publicKey);
-    console.log(fund)
     assert.ok(tokenAccount.owner.equals(pda));
     assert.ok(fund.initializerKey.equals(provider.wallet.publicKey))
     assert.ok(fund.initializerTokenAccount.equals(initializerTokenAccountA))
-
+    assert.ok(fund.initializerAmount.toNumber() === initializerAmount)
   })
 
 });
