@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, SetAuthority, TokenAccount, Token};
+use anchor_spl::token::{self, SetAuthority, Token, TokenAccount};
 use spl_token::instruction::AuthorityType;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
@@ -13,9 +13,13 @@ pub mod fund {
     pub fn initialize(ctx: Context<InitializeFund>, initializer_amount: u64) -> ProgramResult {
         let user = &mut ctx.accounts.user;
         ctx.accounts.fund_account.initializer_key = user.to_account_info().key();
-        ctx.accounts.fund_account.initializer_token_account = ctx.accounts.initializer_token_account.to_account_info().key();
+        ctx.accounts.fund_account.initializer_token_account = ctx
+            .accounts
+            .initializer_token_account
+            .to_account_info()
+            .key();
         ctx.accounts.fund_account.initializer_amount = initializer_amount;
-        msg!("got here {}", ctx.accounts.fund_account.initializer_key);
+        msg!("got here  {}", ctx.accounts.fund_account.initializer_key);
 
         let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
         token::set_authority(ctx.accounts.into(), AuthorityType::AccountOwner, Some(pda))?;
@@ -38,7 +42,7 @@ pub struct InitializeFund<'info> {
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
-    pub rent: Sysvar<'info, Rent>
+    pub rent: Sysvar<'info, Rent>,
 }
 
 // #[derive(Accounts)]
@@ -47,7 +51,6 @@ pub struct InitializeFund<'info> {
 //     pub donator_account: Account<'info, InitializerAccount>,
 //     pub donator_token_account: Account<'info, TokenAccount>,
 // }
-
 
 #[account]
 #[derive(Default)]
@@ -59,13 +62,11 @@ pub struct FundAccount {
 }
 
 impl<'info> From<&mut InitializeFund<'info>>
-for CpiContext<'_, '_, '_, 'info, SetAuthority<'info>>
+    for CpiContext<'_, '_, '_, 'info, SetAuthority<'info>>
 {
     fn from(accounts: &mut InitializeFund<'info>) -> Self {
         let cpi_accounts = SetAuthority {
-            account_or_mint: accounts
-                .initializer_token_account
-                .to_account_info().clone(),
+            account_or_mint: accounts.initializer_token_account.to_account_info().clone(),
             current_authority: accounts.user.to_account_info().clone(),
         };
         let cpi_program = accounts.token_program.to_account_info().clone();
