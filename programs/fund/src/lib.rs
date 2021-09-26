@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::{AnchorDeserialize, AnchorSerialize};
-use anchor_spl::token::{self, SetAuthority, Token, TokenAccount};
+use anchor_spl::token::{self, SetAuthority, Token, TokenAccount, Transfer};
 use spl_token::instruction::AuthorityType;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
@@ -17,14 +17,16 @@ pub mod fund {
         goal: u64,
     ) -> ProgramResult {
         let user = &mut ctx.accounts.user;
-        ctx.accounts.fund_account.initializer_key = user.to_account_info().key();
-        ctx.accounts.fund_account.initializer_token_account = ctx
+        let fund = &mut ctx.accounts.fund_account;
+
+        fund.initializer_key = user.to_account_info().key();
+        fund.initializer_token_account = ctx
             .accounts
             .initializer_token_account
             .to_account_info()
             .key();
-        ctx.accounts.fund_account.initializer_amount = initializer_amount;
-        ctx.accounts.fund_account.goal = goal;
+        fund.initializer_amount = initializer_amount;
+        fund.goal = goal;
         msg!("got here {}", ctx.accounts.fund_account.initializer_key);
 
         let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
@@ -34,13 +36,26 @@ pub mod fund {
 
     pub fn donate_fund(ctx: Context<Donate>, donator_amount: u64) -> ProgramResult {
         msg!("got to the donate");
-        let mut donator = Donator {
+        let donator = Donator {
             amount: donator_amount,
             key: ctx.accounts.user.key(),
             token_account: ctx.accounts.donator_token_account.key(),
         };
-        ctx.accounts.fund_account.donators.push(donator);
-        ctx.accounts.fund_account.amount_raised += donator_amount;
+        let fund = &mut ctx.accounts.fund_account;
+        fund.donators.push(donator);
+        fund.amount_raised += donator_amount;
+        // let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
+        // token::set_authority(ctx.accounts.into(), AuthorityType::AccountOwner, Some(pda))?;
+        let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
+        let seeds = &[&FUND_PDA_SEED[..], &[bump_seed]];
+
+        token::set_authority(
+            ctx.accounts
+                .into_set_authority_context()
+                .with_signer(&[&seeds[..]]),
+            AuthorityType::AccountOwner,
+            Some(pda),
+        )?;
         Ok(())
     }
 }
@@ -61,6 +76,8 @@ pub struct InitializeFund<'info> {
 #[derive(Accounts)]
 pub struct Donate<'info> {
     #[account(mut)]
+    pub initializer_token_account: Account<'info, TokenAccount>,
+    #[account(mut)]
     pub donator_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub fund_account: Account<'info, FundAccount>,
@@ -68,6 +85,7 @@ pub struct Donate<'info> {
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
+    pub pda_account: AccountInfo<'info>,
 }
 
 #[account]
@@ -81,7 +99,6 @@ pub struct FundAccount {
     pub goal: u64,
 }
 
-// #[derive(Default, BorshSerialize, BorshDeserialize, Copy, Clone)]
 #[derive(AnchorSerialize, AnchorDeserialize, Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Donator {
     pub amount: u64,
@@ -101,3 +118,37 @@ impl<'info> From<&mut InitializeFund<'info>>
         CpiContext::new(cpi_program, cpi_accounts)
     }
 }
+
+impl<'info> Donate<'info> {
+    fn into_set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
+        let cpi_accounts = SetAuthority {
+            account_or_mint: self.donator_token_account.to_account_info().clone(),
+            current_authority: self.user.to_account_info(),
+        };
+        let cpi_program = self.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+
+// impl<'info> From<&mut Donate<'info>> for CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
+//     fn from(accounts: &mut Donate<'info>) -> Self {
+//         let cpi_accounts = SetAuthority {
+//             account_or_mint: accounts.donator_token_account.to_account_info(),
+//             current_authority: accounts.user.to_account_info(),
+//         };
+//         let cpi_program = accounts.token_program.to_account_info();
+//         CpiContext::new(cpi_program, cpi_accounts)
+//     }
+// }
+//
+// impl<'info> Donate<'info> {
+//     fn into_fund_transfer(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
+//         let cpi_accounts = Transfer {
+//             from: self.donator_token_account.to_account_info(),
+//             to: self.pda_account.to_account_info(),
+//             authority: self.pda_account.to_account_info(),
+//         };
+//         let cpi_program = self.token_program.to_account_info();
+//         CpiContext::new(cpi_program, cpi_accounts)
+//     }
+// }

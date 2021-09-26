@@ -90,8 +90,11 @@ describe('fund', () => {
 
   it('donates to the fund', async () => {
     const program = anchor.workspace.Fund;
+    console.log(pda)
     const tx = await program.rpc.donateFund(new anchor.BN(donaterAmount), {
       accounts: {
+        pdaAccount: pda,
+        initializerTokenAccount: initializerTokenAccountA,
         fundAccount: fundAccount.publicKey,
         donatorTokenAccount: donatorsTokenAccountA,
         user: provider.wallet.publicKey,
@@ -100,11 +103,15 @@ describe('fund', () => {
       },
     });
     console.log("transaction here:", tx);
-
+    console.log("this is pda", pda.toString())
+    console.log("this is user", provider.wallet.publicKey.toString())
+    console.log("test", (await mintA.getAccountInfo(initializerTokenAccountA)).owner.toString())
     let fund = await program.account.fundAccount.fetch(fundAccount.publicKey);
-
+    let tokenAccount = await mintA.getAccountInfo(fund.donators[0].tokenAccount);
+    console.log("this is tokenAccount", tokenAccount.owner.toString(), pda.toString());
     assert.ok(fund.donators[0].key.equals(provider.wallet.publicKey));
     assert.ok(fund.amountRaised.toNumber() === donaterAmount);
+    assert.ok(tokenAccount.owner.equals(pda));
   })
 
 });
