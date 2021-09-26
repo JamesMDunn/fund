@@ -44,8 +44,6 @@ pub mod fund {
         let fund = &mut ctx.accounts.fund_account;
         fund.donators.push(donator);
         fund.amount_raised += donator_amount;
-        // let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
-        // token::set_authority(ctx.accounts.into(), AuthorityType::AccountOwner, Some(pda))?;
         let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
         let seeds = &[&FUND_PDA_SEED[..], &[bump_seed]];
 
@@ -55,6 +53,11 @@ pub mod fund {
                 .with_signer(&[&seeds[..]]),
             AuthorityType::AccountOwner,
             Some(pda),
+        )?;
+
+        token::transfer(
+            ctx.accounts.into_fund_transfer().with_signer(&[&seeds[..]]),
+            donator_amount,
         )?;
         Ok(())
     }
@@ -130,25 +133,14 @@ impl<'info> Donate<'info> {
     }
 }
 
-// impl<'info> From<&mut Donate<'info>> for CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
-//     fn from(accounts: &mut Donate<'info>) -> Self {
-//         let cpi_accounts = SetAuthority {
-//             account_or_mint: accounts.donator_token_account.to_account_info(),
-//             current_authority: accounts.user.to_account_info(),
-//         };
-//         let cpi_program = accounts.token_program.to_account_info();
-//         CpiContext::new(cpi_program, cpi_accounts)
-//     }
-// }
-//
-// impl<'info> Donate<'info> {
-//     fn into_fund_transfer(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
-//         let cpi_accounts = Transfer {
-//             from: self.donator_token_account.to_account_info(),
-//             to: self.pda_account.to_account_info(),
-//             authority: self.pda_account.to_account_info(),
-//         };
-//         let cpi_program = self.token_program.to_account_info();
-//         CpiContext::new(cpi_program, cpi_accounts)
-//     }
-// }
+impl<'info> Donate<'info> {
+    fn into_fund_transfer(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
+        let cpi_accounts = Transfer {
+            from: self.donator_token_account.to_account_info(),
+            to: self.initializer_token_account.to_account_info(),
+            authority: self.pda_account.to_account_info(),
+        };
+        let cpi_program = self.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
