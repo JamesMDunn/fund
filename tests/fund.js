@@ -1,9 +1,9 @@
-const anchor = require('@project-serum/anchor');
-const { Wallet } = require('@project-serum/anchor');
-const {TOKEN_PROGRAM_ID, Token} = require("@solana/spl-token");
-const assert = require("assert")
+const anchor = require("@project-serum/anchor");
+const { Wallet } = require("@project-serum/anchor");
+const { TOKEN_PROGRAM_ID, Token } = require("@solana/spl-token");
+const assert = require("assert");
 
-describe('fund', () => {
+describe("fund", () => {
   // Configure the client to use the local cluster.
   anchor.setProvider(anchor.Provider.env());
   let mintA = null;
@@ -19,10 +19,10 @@ describe('fund', () => {
   const donaterAmount = 150;
   const goal = 1000;
 
-  it('initialize state', async () => {
+  it("initialize state", async () => {
     await provider.connection.confirmTransaction(
       await provider.connection.requestAirdrop(payer.publicKey, 10000000000)
-    )
+    );
 
     mintA = await Token.createMint(
       provider.connection,
@@ -31,66 +31,75 @@ describe('fund', () => {
       null,
       0,
       TOKEN_PROGRAM_ID
-    )
-    initializerTokenAccountA = await mintA.createAccount(provider.wallet.publicKey);
-    donatorsTokenAccountA = await mintA.createAccount(provider.wallet.publicKey);
+    );
+    initializerTokenAccountA = await mintA.createAccount(
+      provider.wallet.publicKey
+    );
+    donatorsTokenAccountA = await mintA.createAccount(
+      provider.wallet.publicKey
+    );
 
     await mintA.mintTo(
       initializerTokenAccountA,
       mintAuthority.publicKey,
       [mintAuthority],
-      initializerAmount,
-    )
+      initializerAmount
+    );
 
     await mintA.mintTo(
       donatorsTokenAccountA,
       mintAuthority.publicKey,
       [mintAuthority],
       donaterAmount
-    )
+    );
 
-    let intialTokenAccountInfo = await mintA.getAccountInfo(initializerTokenAccountA)
+    let intialTokenAccountInfo = await mintA.getAccountInfo(
+      initializerTokenAccountA
+    );
     let donatorTokenAccount = await mintA.getAccountInfo(donatorsTokenAccountA);
 
     assert.ok(intialTokenAccountInfo.amount.toNumber() === initializerAmount);
-    assert.ok(intialTokenAccountInfo.owner.equals(provider.wallet.publicKey))
+    assert.ok(intialTokenAccountInfo.owner.equals(provider.wallet.publicKey));
     assert.ok(donatorTokenAccount.owner.equals(provider.wallet.publicKey));
-    assert.ok(donatorTokenAccount.amount.toNumber() === donaterAmount)
+    assert.ok(donatorTokenAccount.amount.toNumber() === donaterAmount);
   });
 
-  it('initializes fund', async () => {
+  it("initializes fund", async () => {
     const program = anchor.workspace.Fund;
-    const tx = await program.rpc.initialize(new anchor.BN(initializerAmount), new anchor.BN(goal), {
-      accounts: {
-        fundAccount: fundAccount.publicKey,
-        initializerTokenAccount: initializerTokenAccountA,
-        user: provider.wallet.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-      },
-      signers: [fundAccount]
-    });
+    const tx = await program.rpc.initialize(
+      new anchor.BN(initializerAmount),
+      new anchor.BN(goal),
+      {
+        accounts: {
+          fundAccount: fundAccount.publicKey,
+          initializerTokenAccount: initializerTokenAccountA,
+          user: provider.wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        },
+        signers: [fundAccount],
+      }
+    );
 
     const [tempPda, nonce] = await anchor.web3.PublicKey.findProgramAddress(
       [Buffer.from(anchor.utils.bytes.utf8.encode("fund"))],
       program.programId
-    )
+    );
     pda = tempPda;
-
 
     let tokenAccount = await mintA.getAccountInfo(initializerTokenAccountA);
     let fund = await program.account.fundAccount.fetch(fundAccount.publicKey);
     assert.ok(tokenAccount.owner.equals(pda));
-    assert.ok(fund.initializerKey.equals(provider.wallet.publicKey))
-    assert.ok(fund.initializerTokenAccount.equals(initializerTokenAccountA))
-    assert.ok(fund.initializerAmount.toNumber() === initializerAmount)
+    assert.ok(fund.initializerKey.equals(provider.wallet.publicKey));
+    assert.ok(fund.initializerTokenAccount.equals(initializerTokenAccountA));
+    assert.ok(fund.initializerAmount.toNumber() === initializerAmount);
     assert.ok(fund.goal.toNumber() === goal);
-  })
+  });
 
-  it('donates to the fund', async () => {
+  it("donates to the fund", async () => {
     const program = anchor.workspace.Fund;
-    
+
     const tx = await program.rpc.donateFund(new anchor.BN(donaterAmount), {
       accounts: {
         pdaAccount: pda,
@@ -104,23 +113,30 @@ describe('fund', () => {
     });
 
     let fund = await program.account.fundAccount.fetch(fundAccount.publicKey);
-    let tokenAccount = await mintA.getAccountInfo(fund.donators[0].tokenAccount);
-    let initializerTokenAcc = await mintA.getAccountInfo(fund.initializerTokenAccount);
+    let tokenAccount = await mintA.getAccountInfo(
+      fund.donators[0].tokenAccount
+    );
+    let initializerTokenAcc = await mintA.getAccountInfo(
+      fund.initializerTokenAccount
+    );
     assert.ok(fund.donators[0].key.equals(provider.wallet.publicKey));
     assert.ok(fund.amountRaised.toNumber() === donaterAmount);
     assert.ok(tokenAccount.amount.toNumber() === 0);
-    assert.ok(initializerTokenAcc.amount.toNumber() === initializerAmount + donaterAmount)
+    assert.ok(
+      initializerTokenAcc.amount.toNumber() ===
+        initializerAmount + donaterAmount
+    );
     assert.ok(tokenAccount.owner.equals(pda));
-  })
+  });
 
-  it('initializer withdraw only when goal amount has reached', async () => {
+  it("initializer withdraw only when goal amount has reached", async () => {
     const program = anchor.workspace.Fund;
     await mintA.mintTo(
       donatorsTokenAccountA,
       mintAuthority.publicKey,
       [mintAuthority],
       goal
-    )
+    );
 
     const tx1 = await program.rpc.donateFund(new anchor.BN(goal), {
       accounts: {
@@ -133,6 +149,12 @@ describe('fund', () => {
         tokenProgram: TOKEN_PROGRAM_ID,
       },
     });
+
+    let fund = await program.account.fundAccount.fetch(fundAccount.publicKey);
+
+    assert.ok(fund.amountRaised.toNumber() >= fund.goal);
+    assert.ok(fund.donators[0].amount.toNumber() >= fund.goal);
+
     //
     // const tx2 = await program.rpc.initializerWithdraw({
     //   accounts: {
@@ -153,6 +175,5 @@ describe('fund', () => {
     // assert.ok(tokenAccount.amount.toNumber() === 0);
     // assert.ok(initializerTokenAcc.amount.toNumber() === initializerAmount + donaterAmount)
     // assert.ok(tokenAccount.owner.equals(pda));
-  })
-
+  });
 });

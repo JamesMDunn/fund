@@ -29,29 +29,24 @@ pub mod fund {
         fund.goal = goal;
         msg!("got here {} ", ctx.accounts.fund_account.initializer_key);
 
-        let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
+        let (pda, _bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
         token::set_authority(ctx.accounts.into(), AuthorityType::AccountOwner, Some(pda))?;
         Ok(())
     }
 
     pub fn donate_fund(ctx: Context<Donate>, donator_amount: u64) -> ProgramResult {
-        msg!("got to the donate");
-        let donator = Donator {
-            amount: donator_amount,
-            key: ctx.accounts.user.key(),
-            token_account: ctx.accounts.donator_token_account.key(),
-        };
         let fund = &mut ctx.accounts.fund_account;
-        fund.donators.push(donator);
         fund.amount_raised += donator_amount;
         let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
         let seeds = &[&FUND_PDA_SEED[..], &[bump_seed]];
-        msg!(
-            "owners {} || {}",
-            ctx.accounts.donator_token_account.owner,
-            donator.key
-        );
-        if ctx.accounts.donator_token_account.owner != pda {
+        // If the donating account isn't owned / haven't previously donated
+        if ctx.accounts.donator_token_account.owner != ctx.accounts.pda_account.key() {
+            let donator = Donator {
+                amount: donator_amount,
+                key: ctx.accounts.user.key(),
+                token_account: ctx.accounts.donator_token_account.key(),
+            };
+            fund.donators.push(donator);
             token::set_authority(
                 ctx.accounts
                     .into_set_authority_context()
@@ -59,17 +54,31 @@ pub mod fund {
                 AuthorityType::AccountOwner,
                 Some(pda),
             )?;
+            token::transfer(
+                ctx.accounts.into_fund_transfer().with_signer(&[&seeds[..]]),
+                donator_amount,
+            )?;
+            return Ok(())
+        }
+        
+        for dono in &mut fund.donators {
+            if dono.key.key() == ctx.accounts.user.key() {
+                dono.amount += donator_amount;
+            }
         }
 
         token::transfer(
-            ctx.accounts.into_fund_transfer().with_signer(&[&seeds[..]]),
+            ctx.accounts
+                .into_fund_transfer_pda()
+                .with_signer(&[&seeds[..]]),
             donator_amount,
         )?;
+        msg!("got here");
         Ok(())
     }
 
     pub fn initializer_withdraw(ctx: Context<InitializerWithdraw>) -> ProgramResult {
-        let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
+        let (_pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
         let seeds = &[&FUND_PDA_SEED[..], &[bump_seed]];
 
         token::set_authority(
@@ -164,6 +173,17 @@ impl<'info> Donate<'info> {
         let cpi_accounts = SetAuthority {
             account_or_mint: self.donator_token_account.to_account_info().clone(),
             current_authority: self.user.to_account_info(),
+        };
+        let cpi_program = self.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+impl<'info> Donate<'info> {
+    fn into_fund_transfer_pda(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
+        let cpi_accounts = Transfer {
+            from: self.donator_token_account.to_account_info(),
+            to: self.initializer_token_account.to_account_info(),
+            authority: self.pda_account.to_account_info(),
         };
         let cpi_program = self.token_program.to_account_info();
         CpiContext::new(cpi_program, cpi_accounts)
