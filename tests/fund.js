@@ -1,5 +1,5 @@
 const anchor = require('@project-serum/anchor');
-const {Wallet} = require('@project-serum/anchor');
+const { Wallet } = require('@project-serum/anchor');
 const {TOKEN_PROGRAM_ID, Token} = require("@solana/spl-token");
 const assert = require("assert")
 
@@ -111,6 +111,48 @@ describe('fund', () => {
     assert.ok(tokenAccount.amount.toNumber() === 0);
     assert.ok(initializerTokenAcc.amount.toNumber() === initializerAmount + donaterAmount)
     assert.ok(tokenAccount.owner.equals(pda));
+  })
+
+  it('initializer withdraw only when goal amount has reached', async () => {
+    const program = anchor.workspace.Fund;
+    await mintA.mintTo(
+      donatorsTokenAccountA,
+      mintAuthority.publicKey,
+      [mintAuthority],
+      goal
+    )
+
+    const tx1 = await program.rpc.donateFund(new anchor.BN(goal), {
+      accounts: {
+        pdaAccount: pda,
+        initializerTokenAccount: initializerTokenAccountA,
+        fundAccount: fundAccount.publicKey,
+        donatorTokenAccount: donatorsTokenAccountA,
+        user: provider.wallet.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      },
+    });
+    //
+    // const tx2 = await program.rpc.initializerWithdraw({
+    //   accounts: {
+    //     pdaAccount: pda,
+    //     initializerTokenAccount: initializerTokenAccountA,
+    //     fundAccount: fundAccount.publicKey,
+    //     user: provider.wallet.publicKey,
+    //     systemProgram: anchor.web3.SystemProgram.programId,
+    //     tokenProgram: TOKEN_PROGRAM_ID,
+    //   },
+    // });
+
+    // let fund = await program.account.fundAccount.fetch(fundAccount.publicKey);
+    // let tokenAccount = await mintA.getAccountInfo(fund.donators[0].tokenAccount);
+    // let initializerTokenAcc = await mintA.getAccountInfo(fund.initializerTokenAccount);
+    // assert.ok(fund.donators[0].key.equals(provider.wallet.publicKey));
+    // assert.ok(fund.amountRaised.toNumber() === donaterAmount);
+    // assert.ok(tokenAccount.amount.toNumber() === 0);
+    // assert.ok(initializerTokenAcc.amount.toNumber() === initializerAmount + donaterAmount)
+    // assert.ok(tokenAccount.owner.equals(pda));
   })
 
 });

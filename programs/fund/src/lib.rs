@@ -27,7 +27,7 @@ pub mod fund {
             .key();
         fund.initializer_amount = initializer_amount;
         fund.goal = goal;
-        msg!("got here {}", ctx.accounts.fund_account.initializer_key);
+        msg!("got here {} ", ctx.accounts.fund_account.initializer_key);
 
         let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
         token::set_authority(ctx.accounts.into(), AuthorityType::AccountOwner, Some(pda))?;
@@ -46,19 +46,40 @@ pub mod fund {
         fund.amount_raised += donator_amount;
         let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
         let seeds = &[&FUND_PDA_SEED[..], &[bump_seed]];
+        msg!(
+            "owners {} || {}",
+            ctx.accounts.donator_token_account.owner,
+            donator.key
+        );
+        if ctx.accounts.donator_token_account.owner != pda {
+            token::set_authority(
+                ctx.accounts
+                    .into_set_authority_context()
+                    .with_signer(&[&seeds[..]]),
+                AuthorityType::AccountOwner,
+                Some(pda),
+            )?;
+        }
+
+        token::transfer(
+            ctx.accounts.into_fund_transfer().with_signer(&[&seeds[..]]),
+            donator_amount,
+        )?;
+        Ok(())
+    }
+
+    pub fn initializer_withdraw(ctx: Context<InitializerWithdraw>) -> ProgramResult {
+        let (pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
+        let seeds = &[&FUND_PDA_SEED[..], &[bump_seed]];
 
         token::set_authority(
             ctx.accounts
                 .into_set_authority_context()
                 .with_signer(&[&seeds[..]]),
             AuthorityType::AccountOwner,
-            Some(pda),
+            Some(ctx.accounts.fund_account.initializer_key),
         )?;
 
-        token::transfer(
-            ctx.accounts.into_fund_transfer().with_signer(&[&seeds[..]]),
-            donator_amount,
-        )?;
         Ok(())
     }
 }
@@ -83,6 +104,22 @@ pub struct Donate<'info> {
     #[account(mut)]
     pub donator_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
+    pub fund_account: Account<'info, FundAccount>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub pda_account: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct InitializerWithdraw<'info> {
+    #[account(mut)]
+    pub initializer_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        constraint = fund_account.amount_raised >= fund_account.goal
+    )]
     pub fund_account: Account<'info, FundAccount>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -139,6 +176,17 @@ impl<'info> Donate<'info> {
             from: self.donator_token_account.to_account_info(),
             to: self.initializer_token_account.to_account_info(),
             authority: self.pda_account.to_account_info(),
+        };
+        let cpi_program = self.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+
+impl<'info> InitializerWithdraw<'info> {
+    fn into_set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
+        let cpi_accounts = SetAuthority {
+            account_or_mint: self.initializer_token_account.to_account_info().clone(),
+            current_authority: self.pda_account.to_account_info(),
         };
         let cpi_program = self.token_program.to_account_info();
         CpiContext::new(cpi_program, cpi_accounts)
