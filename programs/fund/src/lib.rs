@@ -27,7 +27,6 @@ pub mod fund {
             .key();
         fund.initializer_amount = initializer_amount;
         fund.goal = goal;
-        msg!("got here {} ", ctx.accounts.fund_account.initializer_key);
 
         let (pda, _bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
         token::set_authority(ctx.accounts.into(), AuthorityType::AccountOwner, Some(pda))?;
@@ -86,10 +85,20 @@ pub mod fund {
                 .into_set_authority_context()
                 .with_signer(&[&seeds[..]]),
             AuthorityType::AccountOwner,
-            Some(ctx.accounts.fund_account.initializer_key),
+            Some(ctx.accounts.user.key()),
         )?;
 
         Ok(())
+    }
+
+    pub fn donor_withdraw(ctx: Context<DonorWithdraw>) -> ProgramResult {
+        let fund = &mut ctx.accounts.fund_account;
+        
+        for donor in &fund.donators {
+            msg!("donor {}", donor.key.key())
+        }
+
+        Ok(()) 
     }
 }
 
@@ -97,7 +106,7 @@ pub mod fund {
 pub struct InitializeFund<'info> {
     #[account(mut)]
     pub initializer_token_account: Account<'info, TokenAccount>,
-    #[account(init, payer = user, space = 8 + 84 + 32 + 32 + 8 + 8)]
+    #[account(init, payer = user, space = 8 + 84 + 32 + 32 + 8 + 8)] // Max of 1 donor for now
     pub fund_account: Account<'info, FundAccount>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -128,6 +137,23 @@ pub struct InitializerWithdraw<'info> {
     #[account(
         mut,
         constraint = fund_account.amount_raised >= fund_account.goal
+    )]
+    pub fund_account: Account<'info, FundAccount>,
+    #[account(mut)]
+    pub user: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub pda_account: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct DonorWithdraw<'info> {
+    #[account(mut)]
+    pub initializer_token_account: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub donator_token_account: Account<'info, TokenAccount>,
+    #[account(mut,
+        constraint = fund_account.amount_raised < fund_account.goal
     )]
     pub fund_account: Account<'info, FundAccount>,
     #[account(mut)]
@@ -205,7 +231,7 @@ impl<'info> Donate<'info> {
 impl<'info> InitializerWithdraw<'info> {
     fn into_set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
         let cpi_accounts = SetAuthority {
-            account_or_mint: self.initializer_token_account.to_account_info().clone(),
+            account_or_mint: self.initializer_token_account.to_account_info(),
             current_authority: self.pda_account.to_account_info(),
         };
         let cpi_program = self.token_program.to_account_info();
