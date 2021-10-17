@@ -57,9 +57,9 @@ pub mod fund {
                 ctx.accounts.into_fund_transfer().with_signer(&[&seeds[..]]),
                 donator_amount,
             )?;
-            return Ok(())
+            return Ok(());
         }
-        
+
         for dono in &mut fund.donators {
             if dono.key.key() == ctx.accounts.user.key() {
                 dono.amount += donator_amount;
@@ -92,13 +92,33 @@ pub mod fund {
     }
 
     pub fn donor_withdraw(ctx: Context<DonorWithdraw>) -> ProgramResult {
-        let fund = &mut ctx.accounts.fund_account;
-        
-        for donor in &fund.donators {
-            msg!("donor {}", donor.key.key())
+        let fund = &ctx.accounts.fund_account;
+        let (_pda, bump_seed) = Pubkey::find_program_address(&[FUND_PDA_SEED], ctx.program_id);
+        let seeds = &[&FUND_PDA_SEED[..], &[bump_seed]];
+
+        if let Some(donor) = fund
+            .donators
+            .iter()
+            .position(|x| x.key.key() == ctx.accounts.user.key())
+        {
+
+            token::transfer(
+                ctx.accounts
+                    .out_of_fund_transfer_pda()
+                    .with_signer(&[&seeds[..]]),
+                fund.donators[donor].amount,
+            )?;
+
+            token::set_authority(
+                ctx.accounts
+                    .into_set_authority_context()
+                    .with_signer(&[&seeds[..]]),
+                AuthorityType::AccountOwner,
+                Some(ctx.accounts.user.key()),
+            )?;
         }
 
-        Ok(()) 
+        Ok(())
     }
 }
 
@@ -154,7 +174,7 @@ pub struct DonorWithdraw<'info> {
     pub donator_token_account: Account<'info, TokenAccount>,
     #[account(mut,
         constraint = fund_account.amount_raised < fund_account.goal
-    )]
+    )] // add contraint here once tests are good for functionality
     pub fund_account: Account<'info, FundAccount>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -204,6 +224,7 @@ impl<'info> Donate<'info> {
         CpiContext::new(cpi_program, cpi_accounts)
     }
 }
+
 impl<'info> Donate<'info> {
     fn into_fund_transfer_pda(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
         let cpi_accounts = Transfer {
@@ -232,6 +253,29 @@ impl<'info> InitializerWithdraw<'info> {
     fn into_set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
         let cpi_accounts = SetAuthority {
             account_or_mint: self.initializer_token_account.to_account_info(),
+            current_authority: self.pda_account.to_account_info(),
+        };
+        let cpi_program = self.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+
+impl<'info> DonorWithdraw<'info> {
+    fn out_of_fund_transfer_pda(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
+        let cpi_accounts = Transfer {
+            from: self.initializer_token_account.to_account_info(),
+            to: self.donator_token_account.to_account_info(),
+            authority: self.pda_account.to_account_info(),
+        };
+        let cpi_program = self.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
+}
+
+impl<'info> DonorWithdraw<'info> {
+    fn into_set_authority_context(&self) -> CpiContext<'_, '_, '_, 'info, SetAuthority<'info>> {
+        let cpi_accounts = SetAuthority {
+            account_or_mint: self.donator_token_account.to_account_info(),
             current_authority: self.pda_account.to_account_info(),
         };
         let cpi_program = self.token_program.to_account_info();
